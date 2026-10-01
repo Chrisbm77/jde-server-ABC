@@ -1,0 +1,7 @@
+clients.json
+.git
+__pycache__
+*.pyc
+.env
+query_log.jsonl
+device_bindings.json

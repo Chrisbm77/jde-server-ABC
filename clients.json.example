@@ -1,0 +1,38 @@
+{
+  "sk_live_REPLACE_WITH_A_LONG_RANDOM_SECRET_1": {
+    "client_name": "ABC - Finance",
+    "department": "finance",
+    "active": true,
+    "expires_on": "2027-03-01",
+    "db": {
+      "server": "localhost",
+      "port": "15433",
+      "database": "JDE_PRODUCTION",
+      "user": "JDE_READONLY_ABC",
+      "password": "REPLACE_ME",
+      "encrypt": "yes",
+      "trust_server_certificate": "yes"
+    }
+  },
+  "sk_live_REPLACE_WITH_A_LONG_RANDOM_SECRET_2": {
+    "client_name": "ABC - Sales",
+    "department": "sales",
+    "active": true,
+    "expires_on": "2027-03-01",
+    "db": {
+      "server": "localhost",
+      "port": "15433",
+      "database": "JDE_PRODUCTION",
+      "user": "JDE_READONLY_ABC",
+      "password": "REPLACE_ME",
+      "encrypt": "yes",
+      "trust_server_certificate": "yes"
+    }
+  },
+  "sk_live_REPLACE_WITH_A_LONG_RANDOM_SECRET_3": {
+    "client_name": "ABC - jde-development skill only",
+    "active": true,
+    "expires_on": "2027-03-01",
+    "db": {}
+  }
+}

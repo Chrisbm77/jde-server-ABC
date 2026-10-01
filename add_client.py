@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""
+add_client.py — safely add one or more clients to clients.json
+
+Run this from inside your jde-server folder:
+    python3 add_client.py
+
+Asks for a department and database connection ONCE (these are almost
+always shared by everyone in the same department), then loops asking
+for names — one API key generated per name, all added together.
+Validates the file before AND after, and writes atomically (temp file +
+rename) so a crash partway through can never corrupt the file for every
+other client already in it.
+"""
+
+import json
+import os
+import secrets
+import sys
+import datetime
+import getpass
+import ipaddress
+
+CLIENTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clients.json")
+
+
+def load_departments():
+    """Pull the valid department list directly from config.py, so this
+    script can never drift out of sync with what's actually configured."""
+    try:
+        import config
+        return sorted(set(getattr(config, "DEPARTMENT_TABLES", {}).keys())
+                       | set(getattr(config, "DEPARTMENT_TABLE_PREFIXES", {}).keys()))
+    except Exception as e:
+        print(f"WARNING: could not import config.py to check valid departments ({e}).")
+        print("Continuing without department validation — double-check spelling yourself.")
+        return None
+
+
+def load_clients():
+    if not os.path.exists(CLIENTS_PATH):
+        print(f"No clients.json found at {CLIENTS_PATH} — starting a new one.")
+        return {}
+    with open(CLIENTS_PATH, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"ERROR: existing clients.json is not valid JSON ({e}).")
+            print("Fix it manually before running this script — refusing to touch a broken file.")
+            sys.exit(1)
+
+
+def save_clients_atomically(clients: dict):
+    serialized = json.dumps(clients, indent=2)
+    json.loads(serialized)  # will raise if something went wrong building it
+
+    tmp_path = CLIENTS_PATH + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(serialized)
+    os.replace(tmp_path, CLIENTS_PATH)  # atomic on the same filesystem
+
+
+def ask(prompt, default=None, required=True):
+    suffix = f" [{default}]" if default is not None else ""
+    while True:
+        value = input(f"{prompt}{suffix}: ").strip()
+        if not value and default is not None:
+            return default
+        if not value and not required:
+            return ""
+        if value:
+            return value
+        print("This is required — please enter a value.")
+
+
+def ask_yes_no(prompt, default=False):
+    suffix = " [Y/n]" if default else " [y/N]"
+    while True:
+        value = input(f"{prompt}{suffix}: ").strip().lower()
+        if not value:
+            return default
+        if value in ("y", "yes"):
+            return True
+        if value in ("n", "no"):
+            return False
+        print("Please answer y or n.")
+
+
+def ask_allowed_ips():
+    print("\nRestrict this batch to specific networks? (optional — most deployments")
+    print("leave this blank and rely on the API key + device binding instead.)")
+    raw = ask(
+        "Comma-separated IPs or CIDR ranges (e.g. 203.0.113.5, 198.51.100.0/24), or leave blank",
+        default="",
+        required=False,
+    )
+    if not raw:
+        return None
+
+    entries = [e.strip() for e in raw.split(",") if e.strip()]
+    validated = []
+    for entry in entries:
+        try:
+            if "/" in entry:
+                ipaddress.ip_network(entry, strict=False)
+            else:
+                ipaddress.ip_address(entry)
+            validated.append(entry)
+        except ValueError:
+            print(f"'{entry}' isn't a valid IP address or CIDR range — aborting.")
+            sys.exit(1)
+    return validated
+
+
+def collect_names():
+    print("\nEnter each person's name, one at a time. Press Enter on a blank line when done.")
+    names = []
+    while True:
+        name = input(f"  Person {len(names) + 1} (blank to finish): ").strip()
+        if not name:
+            if not names:
+                print("  Add at least one person.")
+                continue
+            break
+        names.append(name)
+    return names
+
+
+def main():
+    print("=== Add client(s) to the ABC JDE Assistant (SQL Server) ===\n")
+
+    clients = load_clients()
+    departments = load_departments()
+
+    if departments:
+        print(f"Valid departments: {', '.join(departments)}")
+        print("(leave blank for full-access / admin keys, no department restriction)")
+    department = ask("Department for this batch", default="", required=False)
+    if department and departments and department not in departments:
+        print(f"\nWARNING: '{department}' is not in the known department list.")
+        confirm = ask("Type this exact department again to confirm you really mean it", required=True)
+        if confirm != department:
+            print("Department names didn't match — aborting. Run the script again.")
+            sys.exit(1)
+
+    expires_on = ask("Expiry date for this batch (YYYY-MM-DD), or leave blank for no expiry", default="", required=False)
+    if expires_on:
+        try:
+            datetime.date.fromisoformat(expires_on)
+        except ValueError:
+            print(f"'{expires_on}' isn't a valid YYYY-MM-DD date — aborting.")
+            sys.exit(1)
+
+    print("\n--- Security options for this batch ---")
+    device_binding_enabled = ask_yes_no(
+        "Enable device binding? (locks each key to the first computer that uses it —"
+        " recommended for most clients)",
+        default=False,
+    )
+    allowed_ips = ask_allowed_ips()
+
+    print("\n--- Database connection for this batch ---")
+    print("(This is almost always the same for everyone in one department —")
+    print(" answer it once here, it'll apply to every person you add below.)")
+    print("(SQL Server. If this server reaches the database through an SSH/Cloudflare tunnel,")
+    print(" use the tunnel's address here, e.g. localhost and the forwarded port.)")
+    db_server = ask("SQL Server host (e.g. localhost or 10.0.0.5)")
+    db_port = ask("Port", default="1433")
+    db_database = ask("Database name (the JDE database)")
+    db_user = ask("Database username (a SELECT-only login)")
+    db_password = getpass.getpass("Database password (hidden as you type): ")
+    db_encrypt = "yes" if ask_yes_no("Encrypt the connection?", default=True) else "no"
+    db_trust_cert = "yes" if ask_yes_no(
+        "Trust the server certificate without validating it? (usually YES behind a tunnel or "
+        "with a self-signed cert; NO if it has a real certificate)", default=True) else "no"
+
+    names = collect_names()
+
+    new_entries = {}
+    for name in names:
+        api_key = "sk_live_" + secrets.token_hex(32)
+        while api_key in clients or api_key in new_entries:
+            api_key = "sk_live_" + secrets.token_hex(32)  # collision is astronomically unlikely, but guard anyway
+        entry = {
+            "client_name": name,
+            "active": True,
+            "expires_on": expires_on if expires_on else None,
+            "db": {
+                "server": db_server,
+                "port": db_port,
+                "database": db_database,
+                "user": db_user,
+                "password": db_password,
+                "encrypt": db_encrypt,
+                "trust_server_certificate": db_trust_cert,
+            },
+        }
+        if department:
+            entry["department"] = department
+        if device_binding_enabled:
+            entry["device_binding_enabled"] = True
+        if allowed_ips:
+            entry["allowed_ips"] = allowed_ips
+        new_entries[api_key] = entry
+
+    print(f"\n--- About to add {len(new_entries)} client(s) ---")
+    for api_key, entry in new_entries.items():
+        preview = dict(entry)
+        preview["db"] = dict(preview["db"])
+        preview["db"]["password"] = "*" * len(db_password)
+        print(f"\n{entry['client_name']}:")
+        print(json.dumps({api_key: preview}, indent=2))
+
+    confirm = ask(f"\nType 'yes' to save these {len(new_entries)} client(s) to clients.json", required=True)
+    if confirm.lower() != "yes":
+        print("Cancelled — nothing was saved.")
+        sys.exit(0)
+
+    clients.update(new_entries)
+    save_clients_atomically(clients)
+
+    print(f"\nSaved. clients.json now has {len(clients)} client(s) total.")
+    print("\n=== IMPORTANT — save these keys now, they will not be shown again ===")
+    for api_key, entry in new_entries.items():
+        print(f"{entry['client_name']}: {api_key}")
+    print("========================================================================")
+    print("\nNext steps:")
+    print("1. Send each key to its person through a secure channel (not this terminal's scrollback).")
+    print("2. If clients.json lives on Render as a Secret File, upload this updated version there too.")
+    print("3. Give each person the standard install package (same one everyone uses) plus their own key.")
+    if device_binding_enabled:
+        print(
+            "4. Device binding is ON for this batch — each key locks to whichever computer "
+            "uses it first. If someone needs to move to a new computer later, reset their "
+            "binding via POST /admin/reset-binding (see main.py)."
+        )
+
+
+if __name__ == "__main__":
+    main()
