@@ -8,12 +8,19 @@
 // GOOGLE_SHEETS_LOG_SECRET on the server. After EVERY edit to this script,
 // create a NEW deployment version or the URL keeps serving the old code.
 //
-// Row order:  timestamp, deployment, device_id, status, row_count, tables, sql, error, ip
-// Add a header row yourself in the sheet if you want one.
+// Row order:  timestamp, deployment, device_id, status, row_count, tables, question, sql, error, ip
+// Header row to type in A1:J1: Timestamp, User, Device ID, Status, Rows, List of Tables, User Prompt, SQL, Error, IP
 
 // Generate your own long random value. Do NOT reuse another deployment's secret.
 const SHARED_SECRET = "REPLACE_WITH_A_LONG_RANDOM_SECRET";
 const SHEET_NAME = "QueryLog";
+
+// The user prompt is free text. A value starting with = + - @ would be run as a
+// spreadsheet formula, so prefix it with an apostrophe to keep it plain text.
+function safe(v) {
+  v = v == null ? "" : String(v);
+  return /^[=+\-@]/.test(v) ? "'" + v : v;
+}
 
 function doPost(e) {
   try {
@@ -35,6 +42,7 @@ function doPost(e) {
       body.status || "",
       body.row_count != null ? body.row_count : "",
       body.tables || "",
+      safe(body.question),
       body.sql || "",
       body.error || "",
       body.ip || "",

@@ -403,7 +403,16 @@ def _send_to_google_sheet(entry: dict) -> None:
         pass  # never let a Sheet hiccup affect anything else
 
 
-def log_query(deployment_name: str, sql: str, status: str, row_count: Optional[int] = None, error: Optional[str] = None, ip: Optional[str] = None, device_id: Optional[str] = None, tables: Optional[str] = None) -> None:
+def _clean_question(q: Optional[str]) -> Optional[str]:
+    """The user's wording as sent by the client. Untrusted free text that only
+    ever goes into the log: strip control characters and cap the length."""
+    if not q or not isinstance(q, str):
+        return None
+    q = "".join(ch if (ch >= " " or ch in "\n\t") else " " for ch in q).strip()
+    return q[:1000] or None
+
+
+def log_query(deployment_name: str, sql: str, status: str, row_count: Optional[int] = None, error: Optional[str] = None, ip: Optional[str] = None, device_id: Optional[str] = None, tables: Optional[str] = None, question: Optional[str] = None) -> None:
     entry = {
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "deployment": deployment_name,
@@ -414,6 +423,7 @@ def log_query(deployment_name: str, sql: str, status: str, row_count: Optional[i
         "ip": ip,
         "device_id": device_id,
         "tables": tables,
+        "question": _clean_question(question),
     }
     try:
         with open(LOG_PATH, "a", encoding="utf-8") as f:
@@ -826,6 +836,9 @@ def table_ref(table: str, real_db: bool) -> str:
 
 class QueryRequest(BaseModel):
     sql: str
+    # What the user actually asked, as passed along by the client. Optional and
+    # purely informational: it is only ever written to the query log.
+    question: Optional[str] = None
 
 
 class ResetBindingRequest(BaseModel):
@@ -896,31 +909,31 @@ def query_jde_database(req: QueryRequest, request: Request, authorization: Optio
     tables_used = ", ".join(sorted(referenced_tables(exec_sql if ok else sql)))
 
     if not ok:
-        log_query(name, sql, "refused_write", ip=client_ip, device_id=x_device_id, tables=tables_used)
+        log_query(name, sql, "refused_write", ip=client_ip, device_id=x_device_id, tables=tables_used, question=req.question)
         return {"result": "REFUSED: only single SELECT statements are permitted."}
 
     problem = structural_violation(exec_sql)
     if problem:
-        log_query(name, sql, "refused_table", error=problem, ip=client_ip, device_id=x_device_id, tables=tables_used)
+        log_query(name, sql, "refused_table", error=problem, ip=client_ip, device_id=x_device_id, tables=tables_used, question=req.question)
         return {"result": f"REFUSED: {problem}."}
 
     if not uses_only_allowed_tables(exec_sql, deployment):
-        log_query(name, sql, "refused_table", ip=client_ip, device_id=x_device_id, tables=tables_used)
+        log_query(name, sql, "refused_table", ip=client_ip, device_id=x_device_id, tables=tables_used, question=req.question)
         return {"result": "REFUSED: you don't have access to that data."}
 
     try:
         cols, rows = _execute_with_retry(deployment, exec_sql)
     except Exception as e:
-        log_query(name, sql, "error", error=str(e), ip=client_ip, device_id=x_device_id, tables=tables_used)
+        log_query(name, sql, "error", error=str(e), ip=client_ip, device_id=x_device_id, tables=tables_used, question=req.question)
         return {"result": f"DATABASE ERROR: {e}"}
 
     if not rows:
-        log_query(name, sql, "executed", row_count=0, ip=client_ip, device_id=x_device_id, tables=tables_used)
+        log_query(name, sql, "executed", row_count=0, ip=client_ip, device_id=x_device_id, tables=tables_used, question=req.question)
         return {"result": "No matching records were found."}
 
     truncated = len(rows) > MAX_ROWS
     rows = rows[:MAX_ROWS]
-    log_query(name, sql, "executed", row_count=len(rows), ip=client_ip, device_id=x_device_id, tables=tables_used)
+    log_query(name, sql, "executed", row_count=len(rows), ip=client_ip, device_id=x_device_id, tables=tables_used, question=req.question)
 
     lines = [" | ".join(cols)]
     for row in rows:
