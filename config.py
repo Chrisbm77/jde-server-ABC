@@ -38,11 +38,9 @@ SCHEMA_OVERRIDES = {
     "F9860": "OL920",   # Object Librarian Master
     "F9202": "DD920",   # Data Dictionary Alias/Glossary
     "F98711": "PY920",  # Table Design
-    # TODO(ABC): UDC tables (F0005/F0004) are often in a separate CONTROL
-    # schema on SQL Server, e.g. "F0005": "PRODCTL", "F0004": "PRODCTL".
-    # Confirm with: SELECT TABLE_SCHEMA FROM INFORMATION_SCHEMA.TABLES
-    #               WHERE TABLE_NAME = 'F0005'
-    # then add the override here if it is not PRODDTA.
+    # Confirmed by the user: ABC's UDC (code) tables live in the control schema PRODCTL.
+    "F0005": "PRODCTL",  # UDC values
+    "F0004": "PRODCTL",  # UDC types
 }
 
 # ---------------------------------------------------------------------------
@@ -279,7 +277,16 @@ TABLES = [
             ("DRKY", "TEXT", "the code value itself (space-padded; use LTRIM(RTRIM())). Standard JDE, not yet verified on ABC."),
             ("DRDL01", "TEXT", "description of the code. Standard JDE, not yet verified on ABC."),
         ],
-        "notes": ["Example: statuses of sales order lines = DRSY = '40' AND DRRT = 'AT'.", "If this table gives 'Invalid object name', UDC tables may sit in a control schema (e.g. PRODCTL) — check INFORMATION_SCHEMA.TABLES."],
+        "notes": ["Example: statuses of sales order lines = DRSY = '40' AND DRRT = 'AT'.", "This table lives in the control schema PRODCTL (not PRODDTA) — always write PRODCTL.F0005."],
+    },
+    {
+        "name": "F0004",
+        "description": "User Defined Code types — the list of code categories (system + type) and their titles. Available to every department. Lives in the control schema PRODCTL.",
+        "columns": [
+            ("DTSY", "TEXT", "system code. Standard JDE, not yet verified on ABC."),
+            ("DTRT", "TEXT", "UDC type code. Standard JDE, not yet verified on ABC."),
+            ("DTDL01", "TEXT", "title/description of the code type. Standard JDE, not yet verified on ABC."),
+        ],
     },
     {
         "name": "F0101",
