@@ -210,8 +210,8 @@ DEPARTMENT_TABLES = {
 _SHARED_PREFIXES = ["F01"]  # Address Book family
 DEPARTMENT_TABLE_PREFIXES = {
     "procurement": ["F43", "F40", "F41", "F30", "F31", "F34", "F48", "F0401", "F0411"] + _SHARED_PREFIXES,
-    "finance": ["F09", "F03B", "F04", "F12", "F52"] + _SHARED_PREFIXES,
-    "sales": ["F42", "F03B", "F40", "F41", "F46", "F49", "F17", "F90C"] + _SHARED_PREFIXES,
+    "finance": ["F09", "F03B", "F04", "F12", "F15", "F52", "F55", "F58", "F59"] + _SHARED_PREFIXES,
+    "sales": ["F42", "F03B", "F40", "F41", "F46", "F49", "F17", "F15", "F55", "F58", "F59", "F90C"] + _SHARED_PREFIXES,
     "hr": ["F06", "F07", "F08"] + _SHARED_PREFIXES,
 }
 
@@ -295,6 +295,21 @@ TABLES = [
             ("MCMCU", "TEXT", "business unit code, right-justified with leading blanks (use LTRIM(RTRIM())). Standard JDE, not yet verified on ABC."),
             ("MCDC", "TEXT", "business unit description. Standard JDE, not yet verified on ABC."),
             ("MCCO", "TEXT", "company the business unit belongs to. Standard JDE, not yet verified on ABC."),
+        ],
+    },
+    {
+        "name": "F03B11",
+        "description": "Customer Ledger — A/R invoices, credit memos and receipts per customer (ABC's main sales/billing record; sales, finance)",
+        "columns": [
+            ("RPDOC", "INTEGER", "document number. Standard JDE, not yet verified on ABC."),
+            ("RPDCT", "TEXT", "document type: RI invoice, RD recurring, RN manual, RJ sales overage, RT fees, RM credit memo, RX reimbursement ... Standard JDE codes; ABC treatment in the rules."),
+            ("RPAN8", "INTEGER", "customer number (F0101.ABAN8). Standard JDE, not yet verified on ABC."),
+            ("RPDGJ", "TEXT", "G/L date, Julian CYYDDD — use for period filtering. Standard JDE, not yet verified on ABC."),
+            ("RPDIVJ", "TEXT", "invoice date, Julian CYYDDD. Standard JDE, not yet verified on ABC."),
+            ("RPAG", "REAL", "gross amount, implied decimals (2 for USF). Standard JDE, not yet verified on ABC."),
+            ("RPAAP", "REAL", "open amount still owed, implied decimals. Standard JDE, not yet verified on ABC."),
+            ("RPCRCD", "TEXT", "currency code (USF main). Standard JDE, not yet verified on ABC."),
+            ("RPMCU", "TEXT", "business unit (building/property). Standard JDE, not yet verified on ABC."),
         ],
     },
     {
@@ -469,7 +484,15 @@ EXAMPLES = [
         "SELECT SDDOCO, SDITM, SDUORG, SDUPRC, SDDRQJ FROM {F4211} WHERE SDAN8 = 12345 AND SDLTTR = '545';",
     ),
     (
-        "Give me the top 10 sold items in 2025 (by quantity).",
+        "Who are the top 10 customers by amount billed in 2025?",
+        "SELECT TOP 10 r.RPAN8, MAX(LTRIM(RTRIM(a.ABALPH))) AS customer, SUM(r.RPAG) / 100.0 AS net_billed_usf "
+        "FROM {F03B11} r JOIN {F0101} a ON a.ABAN8 = r.RPAN8 "
+        "WHERE r.RPDGJ BETWEEN 125001 AND 125365 AND LTRIM(RTRIM(r.RPCRCD)) = 'USF' "
+        "AND LTRIM(RTRIM(r.RPDCT)) IN ('RI','RD','RN','RJ','RT','RM') "
+        "GROUP BY r.RPAN8 ORDER BY SUM(r.RPAG) DESC;",
+    ),
+    (
+        "Top 10 sold items in 2025 by quantity (only when item-level sales exist; on ABC F42119 is empty, so answer with top customers / revenue accounts instead).",
         "SELECT TOP 10 h.SDITM, MAX(LTRIM(RTRIM(i.IMDSC1))) AS item_description, SUM(h.SDSOQS) AS qty_shipped_raw "
         "FROM {F42119} h JOIN {F4101} i ON i.IMITM = h.SDITM "
         "WHERE h.SDIVD BETWEEN 125001 AND 125365 "
@@ -508,6 +531,39 @@ RULES = [
     "get_jde_reference for JDE specifics. Do not write SQL from memory when a skill covers the topic. "
     "If no such skill is available, say nothing about it and rely on this schema and the reference "
     "documents.",
+    "ANSWER DIRECTLY, DO NOT STOP AT 'NO DATA': the user wants an answer, not a report of what is "
+    "missing. If the obvious table for a question is empty or does not fit, do NOT reply that you "
+    "cannot answer and do NOT ask the user where the data is. Instead, in the same turn: (1) work out "
+    "what business this database actually records by checking which candidate tables hold rows and "
+    "reading their real columns and codes (F98711, F9202, F0005); (2) choose the closest meaningful "
+    "measure of what the user asked (e.g. 'top sold items' -> top revenue accounts and top customers by "
+    "invoiced amount when there is no item-level sales data); (3) run it and give the result table "
+    "first; (4) then state in a few lines what you counted and what you excluded (document types, "
+    "currencies, accounts, date range, decimals applied) and that you substituted a measure, and only "
+    "then offer one alternative definition. Ask a question before answering only when two readings "
+    "would give completely different results and nothing in the data can settle it.",
+    "ABC BUSINESS CONTEXT (learned from live data, re-verify if a result looks off): ABC's database "
+    "records REAL-ESTATE / MALL billing, not product sales. Item-level sales tables F4201, F4211, "
+    "F42119 and the item ledger F4111 are EMPTY (0 rows) — never lead with them. The item master F4101 "
+    "has items but no sales. Revenue lives in the A/R invoice ledger F03B11 (about 2.4 million rows, "
+    "customer = RPAN8 joined to F0101.ABAN8 for the name, G/L date RPDGJ, amount RPAG, document type "
+    "RPDCT, currency RPCRCD) and in the general ledger F0911 revenue accounts (object accounts "
+    "5000-5999, with descriptions in F0901 such as 'Stands Revenue', 'Tenants Revenue', 'Common "
+    "Charges Revenue'); real-estate lease/billing masters are in the F15xx tables. For any question "
+    "about 'sales', 'revenue', 'top customers/tenants' or 'best sellers', use these.",
+    "ABC REVENUE CONVENTIONS (from the first validated answer): count document types RI invoices, RD "
+    "recurring billing, RN manual billing, RJ sales overage, RT fees/interest and RM credit memos "
+    "(netted off); EXCLUDE RX reimbursements (very large, ~94.7M in 2025 — mention them, offer to "
+    "include), RL advances, RH account transfers, RZ cash collected in advance, RU unapplied cash. "
+    "The main currency is USF (2 decimals, so divide stored amounts by 100) — report other currencies "
+    "(EUF, LBF) separately or note them as excluded, never add currencies together silently. For "
+    "revenue by account use only object accounts 5000-5999 and drop the automatic trade-account offset "
+    "lines so VAT, suspense and accrual accounts are not counted. Rank by invoice G/L date (RPDGJ) "
+    "using Julian ranges (2025 = 125001 to 125365). Customers with two address numbers (e.g. the same "
+    "company under two numbers) appear twice — mention it and offer to combine by name.",
+    "CUSTOM TABLES: ABC has many custom tables (F55xx, F58xx, F59xx). If a standard table does not "
+    "answer a question, look for the custom table in F9860 (SIOBNM LIKE 'F55%' etc.) and its columns "
+    "in F98711 before concluding the data is unavailable.",
     "Only write single SELECT statements. Never INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE/MERGE.",
     'Do not invent results. If query_jde_database returns "No matching records were found", say so plainly.',
     "DEPARTMENTS: each key belongs to one department — procurement, finance, sales or hr — and can only "
