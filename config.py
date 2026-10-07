@@ -81,7 +81,7 @@ RESTRICT_TO_APPROVED_TABLES = False
 #     look up table designs), UDC values/types (F0004, F0005), Address Book
 #     and its satellites (F0101, F0111, F0115, F0116 ...), business units
 #     (F0006), company/fiscal/currency setup (F0008-F0010, F0013, F0015).
-#   SALES: sales orders + history (F4201, F4211, F42119, F42199, F42019),
+#   SALES (+ F0901/F0902 account master and balances, added on request): sales orders + history (F4201, F4211, F42119, F42199, F42019),
 #     pricing and agreements (F40xx, F407x), customer master and A/R
 #     (F03012, F03B*), item master/stock/ledger (F41xx), shipping,
 #     warehouse and transportation (F4215, F46*, F49*), forecast (F3460),
@@ -158,6 +158,8 @@ DEPARTMENT_TABLES = {
         "F9860", "F98711",
     },
     "sales": {
+        # Added on request: account balances + chart of accounts, so sales can report revenue by account.
+        "F0901", "F0902",
         "F0004", "F0005", "F0006", "F0008", "F0009", "F00090",
         "F00090D", "F00091", "F00092", "F0010", "F0013", "F0015",
         "F0070", "F0101", "F0101A", "F01090", "F01092", "F01093",
