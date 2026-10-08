@@ -79,7 +79,7 @@ RESTRICT_TO_APPROVED_TABLES = False
 #     look up table designs), UDC values/types (F0004, F0005), Address Book
 #     and its satellites (F0101, F0111, F0115, F0116 ...), business units
 #     (F0006), company/fiscal/currency setup (F0008-F0010, F0013, F0015).
-#   SALES (+ F0901/F0902 account master and balances, added on request): sales orders + history (F4201, F4211, F42119, F42199, F42019),
+#   SALES (+ F0901/F0902/F0911 financial tables, added on request): sales orders + history (F4201, F4211, F42119, F42199, F42019),
 #     pricing and agreements (F40xx, F407x), customer master and A/R
 #     (F03012, F03B*), item master/stock/ledger (F41xx), shipping,
 #     warehouse and transportation (F4215, F46*, F49*), forecast (F3460),
@@ -156,8 +156,8 @@ DEPARTMENT_TABLES = {
         "F9860", "F98711",
     },
     "sales": {
-        # Added on request: account balances + chart of accounts, so sales can report revenue by account.
-        "F0901", "F0902",
+        # Added on request: chart of accounts, account balances and G/L lines, so sales figures can be read from the financial tables.
+        "F0901", "F0902", "F0911",
         "F0004", "F0005", "F0006", "F0008", "F0009", "F00090",
         "F00090D", "F00091", "F00092", "F0010", "F0013", "F0015",
         "F0070", "F0101", "F0101A", "F01090", "F01092", "F01093",
@@ -308,7 +308,7 @@ TABLES = [
     },
     {
         "name": "F03B11",
-        "description": "Customer Ledger — A/R invoices, credit memos and receipts per customer (ABC's main sales/billing record; sales, finance)",
+        "description": "Customer Ledger — A/R invoices, credit memos and receipts per customer (receivables ledger — NOT used for sales figures; sales, finance)",
         "columns": [
             ("RPDOC", "INTEGER", "document number. Standard JDE, not yet verified on ABC."),
             ("RPDCT", "TEXT", "document type: RI invoice, RD recurring, RN manual, RJ sales overage, RT fees, RM credit memo, RX reimbursement ... Standard JDE codes; ABC treatment in the rules."),
@@ -493,12 +493,13 @@ EXAMPLES = [
         "SELECT SDDOCO, SDITM, SDUORG, SDUPRC, SDDRQJ FROM {F4211} WHERE SDAN8 = 12345 AND SDLTTR = '545';",
     ),
     (
-        "Who are the top 10 customers by amount billed in 2025?",
-        "SELECT TOP 10 r.RPAN8, MAX(LTRIM(RTRIM(a.ABALPH))) AS customer, SUM(r.RPAG) / 100.0 AS net_billed_usf "
-        "FROM {F03B11} r JOIN {F0101} a ON a.ABAN8 = r.RPAN8 "
-        "WHERE r.RPDGJ BETWEEN 125001 AND 125365 AND LTRIM(RTRIM(r.RPCRCD)) = 'USF' "
-        "AND LTRIM(RTRIM(r.RPDCT)) IN ('RI','RD','RN','RJ','RT','RM') "
-        "GROUP BY r.RPAN8 ORDER BY SUM(r.RPAG) DESC;",
+        "What were our sales (revenue) in 2025 by revenue account?",
+        "SELECT TOP 30 LTRIM(RTRIM(g.GLOBJ)) AS object_account, MAX(LTRIM(RTRIM(a.GMDL01))) AS description, "
+        "-SUM(g.GLAA) / 100.0 AS revenue "
+        "FROM {F0911} g JOIN {F0901} a ON a.GMAID = g.GLAID "
+        "WHERE g.GLLT = 'AA' AND g.GLPOST = 'P' AND g.GLDGJ BETWEEN 125001 AND 125365 "
+        "AND LTRIM(RTRIM(g.GLOBJ)) BETWEEN '5000' AND '5999' "
+        "GROUP BY g.GLOBJ ORDER BY -SUM(g.GLAA) DESC;",
     ),
     (
         "Top 10 sold items in 2025 by quantity (only when item-level sales exist; on ABC F42119 is empty, so answer with top customers / revenue accounts instead).",
@@ -554,22 +555,29 @@ RULES = [
     "ABC BUSINESS CONTEXT (learned from live data, re-verify if a result looks off): ABC's database "
     "records REAL-ESTATE / MALL billing, not product sales. Item-level sales tables F4201, F4211, "
     "F42119 and the item ledger F4111 are EMPTY (0 rows) — never lead with them. The item master F4101 "
-    "has items but no sales. Revenue lives in the A/R invoice ledger F03B11 (about 2.4 million rows, "
-    "customer = RPAN8 joined to F0101.ABAN8 for the name, G/L date RPDGJ, amount RPAG, document type "
-    "RPDCT, currency RPCRCD) and in the general ledger F0911 revenue accounts (object accounts "
+    "has items but no sales. Revenue lives in the general ledger F0911 revenue accounts (object accounts "
     "5000-5999, with descriptions in F0901 such as 'Stands Revenue', 'Tenants Revenue', 'Common "
-    "Charges Revenue'); real-estate lease/billing masters are in the F15xx tables. For any question "
-    "about 'sales', 'revenue', 'top customers/tenants' or 'best sellers', use these.",
-    "ABC REVENUE CONVENTIONS (from the first validated answer): count document types RI invoices, RD "
+    "Charges Revenue') and in the account balances F0902; real-estate lease/billing masters are in "
+    "the F15xx tables. Do NOT use the A/R customer ledger F03B11 for sales figures. For any question "
+    "about 'sales', 'revenue' or 'best sellers', use F0911/F0901/F0902.",
+    "ABC REVENUE CONVENTIONS (from the first validated answer, document types of the billing entries): count document types RI invoices, RD "
     "recurring billing, RN manual billing, RJ sales overage, RT fees/interest and RM credit memos "
     "(netted off); EXCLUDE RX reimbursements (very large, ~94.7M in 2025 — mention them, offer to "
     "include), RL advances, RH account transfers, RZ cash collected in advance, RU unapplied cash. "
     "The main currency is USF (2 decimals, so divide stored amounts by 100) — report other currencies "
     "(EUF, LBF) separately or note them as excluded, never add currencies together silently. For "
     "revenue by account use only object accounts 5000-5999 and drop the automatic trade-account offset "
-    "lines so VAT, suspense and accrual accounts are not counted. Rank by invoice G/L date (RPDGJ) "
-    "using Julian ranges (2025 = 125001 to 125365). Customers with two address numbers (e.g. the same "
-    "company under two numbers) appear twice — mention it and offer to combine by name.",
+    "lines so VAT, suspense and accrual accounts are not counted. Filter by G/L date (GLDGJ) "
+    "using Julian ranges (2025 = 125001 to 125365). Revenue is stored as credits (negative amounts): "
+    "present it as a positive number by negating the sum.",
+    "SALES FIGURES COME FROM THE FINANCIAL TABLES: whenever the user asks about sales, sales figures, "
+    "revenue, turnover, billing or 'how much did we sell', read the amounts from the financial tables, "
+    "not from the sales order tables: F0911 "
+    "(G/L lines, ledger type AA, posted, object accounts 5000-5999) for sales by revenue account, and "
+    "F0902/F0901 (balances and account descriptions) for totals per account and period. Do NOT read "
+    "sales figures from F03B11, and do not start from F4201/F4211/F42119 — they are empty at ABC. Apply the ABC revenue conventions "
+    "above (document types, currency, decimals, Julian dates), and state in the answer which "
+    "financial table you used.",
     "CUSTOM TABLES: ABC has many custom tables (F55xx, F58xx, F59xx). If a standard table does not "
     "answer a question, look for the custom table in F9860 (SIOBNM LIKE 'F55%' etc.) and its columns "
     "in F98711 before concluding the data is unavailable.",
