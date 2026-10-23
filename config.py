@@ -537,8 +537,11 @@ EXAMPLES = [
 RULES = [
     "SKILLS FIRST: every time you are about to extract data from the database, first load and follow "
     "the JDE skills available in this session (jde-data-architecture for tables, keys, joins, status "
-    "and document codes; jde-business-data for querying and financial/GL data) and use "
-    "get_jde_reference for JDE specifics. Do not write SQL from memory when a skill covers the topic. "
+    "and document codes; jde-business-data for querying and financial/GL data; "
+    "jde-business-advisor for how JDE modules and processes work, what a program or report does and "
+    "how modules integrate; jde-development for JDE objects, tables, business views and data "
+    "structures) and use get_jde_reference for JDE specifics. Load every skill that applies to the "
+    "question, before writing any SQL. Do not write SQL from memory when a skill covers the topic. "
     "If no such skill is available, say nothing about it and rely on this schema and the reference "
     "documents.",
     "ANSWER DIRECTLY, DO NOT STOP AT 'NO DATA': the user wants an answer, not a report of what is "
