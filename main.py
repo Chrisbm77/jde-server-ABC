@@ -1039,6 +1039,33 @@ REFERENCE_TOPICS = {
     "business-function-programming": "business-function-programming.md",
     "development-tools-overview": "development-tools-overview.md",
     "core-rules": "core-rules.md",
+    # ---- Knowledge served to users so no skill has to be installed on their PC ----
+    # Data architecture (from the jde-data-architecture skill)
+    "da-0-rules": "da-0-rules.md",
+    "da-1-foundation": "da-1-foundation.md",
+    "da-2-financials": "da-2-financials.md",
+    "da-3-procurement": "da-3-procurement.md",
+    "da-4-supply-chain": "da-4-supply-chain.md",
+    "da-5-crm": "da-5-crm.md",
+    "da-6-asset-realestate": "da-6-asset-realestate.md",
+    "da-7-health-apparel": "da-7-health-apparel.md",
+    # Querying / general ledger method (T-SQL, client-neutral)
+    "bd-query-method": "bd-query-method.md",
+    "bd-gl-balances": "bd-gl-balances.md",
+    # Business advisor (from the jde-business-advisor skill)
+    "ba-financials": "ba-financials.md",
+    "ba-supply-management": "ba-supply-management.md",
+    "ba-supply-chain-manufacturing": "ba-supply-chain-manufacturing.md",
+    "ba-asset-lifecycle": "ba-asset-lifecycle.md",
+    "ba-customer-relationship": "ba-customer-relationship.md",
+    "ba-human-capital": "ba-human-capital.md",
+    "ba-project-management": "ba-project-management.md",
+    "ba-health-safety-environment": "ba-health-safety-environment.md",
+    "ba-localizations": "ba-localizations.md",
+    "ba-cross-product-tools": "ba-cross-product-tools.md",
+    "ba-cross-cutting-concepts": "ba-cross-cutting-concepts.md",
+    "ba-guide": "ba-guide.md",
+    "skills-index": "skills-index.md",
 }
 
 

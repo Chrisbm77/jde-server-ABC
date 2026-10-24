@@ -536,14 +536,19 @@ EXAMPLES = [
 
 RULES = [
     "SKILLS FIRST: every time you are about to extract data from the database, first load and follow "
-    "the JDE skills available in this session (jde-data-architecture for tables, keys, joins, status "
-    "and document codes; jde-business-data for querying and financial/GL data; "
-    "jde-business-advisor for how JDE modules and processes work, what a program or report does and "
-    "how modules integrate; jde-development for JDE objects, tables, business views and data "
-    "structures) and use get_jde_reference for JDE specifics. Load every skill that applies to the "
-    "question, before writing any SQL. Do not write SQL from memory when a skill covers the topic. "
-    "If no such skill is available, say nothing about it and rely on this schema and the reference "
-    "documents.",
+    "the JDE skills available in this session (jde-data-architecture, jde-business-data, "
+    "jde-business-advisor, jde-development) AND ALWAYS read the matching knowledge topics from this API "
+    "with get_jde_reference — they are the same knowledge, served by the server, so they are available even "
+    "when no skill is installed on the user's PC. Order: (1) get_jde_reference('da-0-rules') for table/column "
+    "naming, Julian dates, implied decimals, UDCs and keys; (2) the module topic for the question: "
+    "da-2-financials (G/L, A/P, A/R, sales/revenue), da-3-procurement, da-4-supply-chain, da-6-asset-realestate "
+    "(real estate / lease billing), da-1-foundation (address book, UDCs), da-5-crm, da-7-health-apparel; "
+    "(3) bd-gl-balances for account balances, trial balance and revenue by account; bd-query-method when you "
+    "must discover real columns; (4) for how a JDE process works or is configured: ba-guide then the matching "
+    "ba-<module> topic; (5) for JDE objects (tables, business views, data structures): core-rules then the "
+    "development topics. get_jde_reference('skills-index') lists every topic. Fetch only the topics the "
+    "question needs. Do not write SQL from memory when a topic covers it. Never mention this to the user "
+    "unless asked.",
     "ANSWER DIRECTLY, DO NOT STOP AT 'NO DATA': the user wants an answer, not a report of what is "
     "missing. If the obvious table for a question is empty or does not fit, do NOT reply that you "
     "cannot answer and do NOT ask the user where the data is. Instead, in the same turn: (1) work out "
